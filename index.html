@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+<link rel="stylesheet" href="bootstrap.min.css" type="text/css">
+<title>StegoCast</title>
+</head>
+<body>
+<div class="container">
+<h1>StegoCast</h1>
+
+<p> Communicate signed transactions over a surveilled channel</p>
+
+<p>Fork of <a href="https://github.com/jes/stegoseed">StegoSeed</a> by James Stanley.</p>
+
+<p>You can generate the transaction mnemonic using <a href="https://gist.github.com/grubles/41a8ab74afe2cee6ef7128b07438455b">this python script</a> by <a href="https://twitter.com/notgrubles">grubles</a>.</p>
+
+<p>Download the code off Github: <a href="https://github.com/6102bitcoin/stegocast">https://github.com/6102bitcoin/stegocast</a> and run it on a computer by opening the index.html file.</p>
+
+<p>This tool uses a Markov model of a text corpus to generate sentences which encode signed Bitcoin transactions by including <a href="https://github.com/6102bitcoin/stegocast/txwords.md">a transaction wordlist</a> in the text.</p>
+
+<p>----------EXAMPLE------------</p>
+
+<p> Example Signed Hex Transaction:</p>
+<code>01000000017b1eabe0209b1fe794124575ef807057c77ada2138ae4fa8d6c4de0398a14f3f00000000494830450221008949f0cb400094ad2b5eb399d59d01c14d73d8fe6e96df1a7150deb388ab8935022079656090d7f6bac4c9a94e0aad311a4268e082a725f8aeae0573fb12ff866a5f01ffffffff01f0ca052a010000001976a914cbc20a7664f2f69e5355aa427045bc15e7c6c77288ac00000000</code></p>
+
+<p> Running grubles script returns the following mnemonic:</p>
+<code>white metal beside wife anywhere decay trail blossom flutter everything admit pair government sorry sting coward moan beg teeth sigh sway magic creak await left salt doom mold swear mass split wrist bother door rude king sail compare attention damn became volume afternoon open shoulder reflection water north crack steady good awaken fragile great delight decision king second chair hurl body ink type relax forgot decision interest milk flesh sadness naked stubborn into nail cheer express underneath crazy creation throw possibly noise remove stab hook former shout write imagination fist snow sister half white metal beside valley cruel trail somehow stone name crystal shoe murder ignore beautiful silver nation nose prince opinion coat lung dwell against check</code> </p>
+
+<p>NOTE: MARKOV MODEL NOT COMPATIBLE WITH ALL TRANSACTION MNEMONIC WORDS - NEED NEW MODEL<p>
+
+<p>-----------------------------</p>
+
+<span id="status">Still loading (got 7M to load)...</span>
+
+<br>
+<h3>Enter your transaction menmonic:</h3>
+<br>
+
+<input class="form-control" id="seed" style="width:100%" value="even through long always world too friend tell try hand thought over here other need smile"><br>
+<button class="btn btn-primary" id="go">Hide</button><br>
+<br>
+<div style="font-family: monospace; border: solid 1px #ccc" id="stego"></div>
+<br>
+<h3>Enter your text:<h3>
+<br>
+<textarea class="form-control" id="text" style="width:100%; height:100px"></textarea>
+<button class="btn btn-primary" id="ungo">Unhide</button><br>
+<div style="font-family: monospace" id="unstego"></div>
+
+<div style="margin-bottom: 200px"></div>
+
+</div>
+<script src="jquery-3.1.0.min.js"></script>
+<script type="text/javascript">
+var wait = false;
+function markovready() {
+    $('#status').text("");
+    if (wait)
+        stegoseed();
+}
+
+// http://stackoverflow.com/questions/18749591/encode-html-entities-in-javascript
+function encode_entities(s) {
+    return s.replace(/[\u00A0-\u9999<>\&]/gim, function(i) {
+       return '&#'+i.charCodeAt(0)+';';
+    });
+}
+
+function stegoseed() {
+    // split words by space
+    var words = $('#seed').val().split(/\s+/);
+
+    var output = [];
+
+    for (var i = 0; i < words.length; i++) {
+        var w = words[i];
+        var ok = false;
+        for (var j = 0; j < 200 && !ok; j++) {
+            // build a forward chain
+            var forward = generate_markov(markovdata["forward"], w);
+            if (!forward)
+                continue;
+            forward = forward.map(encode_entities);
+
+            // build a reverse chain
+            var reverse = generate_markov(markovdata["reverse"], w);
+            if (!reverse)
+                continue;
+            reverse = reverse.map(encode_entities);
+
+            // concatenate and put in output
+            ok = true;
+            output.push(reverse.reverse().join(' ') + ' ' + '<span style="background-color:#aaaaff">' + w + '</span>' + ' ' + forward.join(' '));
+        }
+
+        if (!ok) {
+            $('#stego').text("Couldn't form a sentence for " + w);
+            return;
+        }
+    }
+
+    $('#stego').html(output.join(' '));
+}
+
+function generate_markov(markov, word) {
+    var last = [];
+
+    last.push(word);
+
+    var output = [];
+
+    while (true) {
+        var lastkey = last.join(',');
+        var words = markov[lastkey];
+        if (!words || words.length == 0) {
+            return false;
+        }
+        var w = words[Math.floor(Math.random() * words.length)];
+
+        // Tweaked this from the original to catch formatting (Uppercase/Punctuation)
+        if (w in markovdata["txwords"] ||  w.toLowerCase().replace(/[^a-z]/g, '') in markovdata["txwords"] ) {
+            console.log("Shouldn't be able to generate txwords: " + w);
+            return false;
+        }
+
+        if (w == '$')
+            return output;
+
+        last.push(w);
+        while (last.length > markovdata["order"]) {
+            last.shift();
+        }
+
+        output.push(w);
+    }
+}
+
+function unstegoseed() {
+    var words = $('#text').val().split(/\s+/);
+
+    var seedwords = [];
+
+    for (var i = 0; i < words.length; i++) {
+        var w = words[i];
+        simplew = w.toLowerCase().replace(/[^a-z]/g, '');
+        if (simplew in markovdata["txwords"]) {
+            seedwords.push(w);
+        }
+    }
+
+    if (seedwords.length > 0)
+        $('#unstego').html(seedwords.join(' '));
+    else
+        // $('#unstego').html("(no BIP39 words found)");
+        $('#unstego').html("(no txwords found)");
+}
+
+$('#go').click(function() {
+    if(!markovready) {
+        wait = true;
+        return;
+    }
+    stegoseed();
+});
+
+$('#ungo').click(function() {
+    unstegoseed();
+});
+</script>
+<script src="markov.js"></script>
+</body>
+</html>
